@@ -1,21 +1,17 @@
 from datetime import datetime, timedelta
 from airflow import DAG
-from airflow.providers.cncf.kubernetes.operators.kubernetes_pod import KubernetesPodOperator
-from airflow.kubernetes.volume import Volume
-from airflow.kubernetes.volume_mount import VolumeMount
+from airflow.operators.python import PythonOperator
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.application import MIMEApplication
 
-# Kubernetes Config
-NAMESPACE = "airflow"  # Change if needed
-PVC_NAME = "airflow-shared-pvc"
-MOUNT_PATH = "/mnt/shared"
-
-# Define Volume and VolumeMount
-volume_mount = VolumeMount(
-    name=PVC_NAME, mount_path=MOUNT_PATH, sub_path=None, read_only=False
-)
-volume = Volume(
-    name=PVC_NAME, configs={"persistentVolumeClaim": {"claimName": PVC_NAME}}
-)
+# Email Configuration (Use Airflow Secrets in production)
+SMTP_SERVER = "smtp.gmail.com"
+SMTP_PORT = 465
+SENDER_EMAIL = "madhav.prajapati@solvei8.com"
+SENDER_PASSWORD = "your-app-password"  # Use Airflow Secrets
+RECIPIENT_EMAIL = "madhav5mar2001@gmail.com"
 
 default_args = {
     "owner": "airflow",
@@ -25,79 +21,78 @@ default_args = {
 }
 
 dag = DAG(
-    "k8s_pvc_email_dag",
+    "xcom_email_dag",
     default_args=default_args,
     schedule_interval=None,
     catchup=False,
 )
 
-# Task 1: Create a file inside the shared PVC
-create_file_pod = KubernetesPodOperator(
-    task_id="create_file_pod",
-    name="create-file-pod",
-    namespace=NAMESPACE,
-    image="python:3.9",
-    cmds=["/bin/sh", "-c"],
-    arguments=[
-        f"echo 'id,name,age\n1,John Doe,30\n2,Jane Doe,25' > {MOUNT_PATH}/example.csv"
-    ],
-    volumes=[volume],
-    volume_mounts=[volume_mount],
-    is_delete_operator_pod=True,
+def generate_file_content(**kwargs):
+    """Generate file content and push it to XCom."""
+    file_content = "id,name,age\n1,John Doe,30\n2,Jane Doe,25"
+    kwargs['ti'].xcom_push(key="file_data", value=file_content)
+    print("File content stored in XCom.")
+
+def write_to_file(**kwargs):
+    """Retrieve file content from XCom and write it to a file."""
+    ti = kwargs["ti"]
+    file_content = ti.xcom_pull(task_ids="generate_file", key="file_data")
+    file_path = "/tmp/example.csv"
+    
+    with open(file_path, "w") as file:
+        file.write(file_content)
+    
+    ti.xcom_push(key="file_path", value=file_path)
+    print(f"File written to {file_path}")
+
+def send_email(**kwargs):
+    """Send an email with the file attached."""
+    ti = kwargs["ti"]
+    file_path = ti.xcom_pull(task_ids="write_file", key="file_path")
+    
+    message = MIMEMultipart()
+    message["Subject"] = "Email with Attachment"
+    message["From"] = SENDER_EMAIL
+    message["To"] = RECIPIENT_EMAIL
+
+    # Attach body
+    message.attach(MIMEText("Here is the attached file."))
+
+    # Attach file
+    with open(file_path, "rb") as file:
+        message.attach(MIMEApplication(file.read(), Name="example.csv"))
+
+    # Send email
+    with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
+        server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        server.sendmail(SENDER_EMAIL, RECIPIENT_EMAIL, message.as_string())
+
+    print("Email sent successfully!")
+
+# Task 1: Store file content in XCom
+generate_file_task = PythonOperator(
+    task_id="generate_file",
+    python_callable=generate_file_content,
+    provide_context=True,
     dag=dag,
 )
 
-# Task 2: Read the file and send an email
-send_email_pod = KubernetesPodOperator(
-    task_id="send_email_pod",
-    name="send-email-pod",
-    namespace=NAMESPACE,
-    image="python:3.9",
-    cmds=["/bin/sh", "-c"],
-    arguments=[
-        f"""
-        pip install smtplib &&
-        python -c '
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.mime.application import MIMEApplication
-
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 465
-SENDER_EMAIL = "madhav.prajapati@solvei8.com"
-SENDER_PASSWORD = "your-app-password"  # Use Airflow Secrets
-RECIPIENT_EMAIL = "madhav5mar2001@gmail.com"
-FILE_PATH = "{MOUNT_PATH}/example.csv"
-
-# Prepare email
-message = MIMEMultipart()
-message["Subject"] = "Email with Attachment"
-message["From"] = SENDER_EMAIL
-message["To"] = RECIPIENT_EMAIL
-
-# Attach body
-message.attach(MIMEText("Here is the file."))
-
-# Attach file
-with open(FILE_PATH, "rb") as file:
-    message.attach(MIMEApplication(file.read(), Name="example.csv"))
-
-# Send email
-with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
-    server.login(SENDER_EMAIL, SENDER_PASSWORD)
-    server.sendmail(SENDER_EMAIL, RECIPIENT_EMAIL, message.as_string())
-
-print("Email sent successfully!")
-        '
-        """
-    ],
-    volumes=[volume],
-    volume_mounts=[volume_mount],
-    is_delete_operator_pod=True,
+# Task 2: Write content from XCom to a file
+write_file_task = PythonOperator(
+    task_id="write_file",
+    python_callable=write_to_file,
+    provide_context=True,
     dag=dag,
 )
 
-# Define dependencies
-create_file_pod >> send_email_pod
+# Task 3: Send email with the file as an attachment
+send_email_task = PythonOperator(
+    task_id="send_email",
+    python_callable=send_email,
+    provide_context=True,
+    dag=dag,
+)
+
+# Define task dependencies
+generate_file_task >> write_file_task >> send_email_task
 
