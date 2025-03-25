@@ -44,7 +44,7 @@ with DAG(
     "elasticsearch_list_indices",
     default_args=default_args,
     description="DAG to list OpenSearch indices",
-    schedule_interval="@daily",
+    schedule="@daily",
     catchup=False,
 ) as dag:
 
