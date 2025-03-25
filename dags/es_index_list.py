@@ -25,7 +25,8 @@ dag = DAG(
     tags=['elasticsearch']
 )
 
-ES_HOST = "http://elasticsearch1.stage-k8s.strawmine.com"
+# Ensure this has the correct URL with scheme and port
+ES_HOST = "http://elasticsearch1.stage-k8s.strawmine.com:9200"  
 
 def list_indices():
     """Fetch and log all indices in Elasticsearch."""
