@@ -3,19 +3,16 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from elasticsearch import Elasticsearch
 import logging
+import re
 
 log = logging.getLogger(__name__)
 
 PARENT_DAG_NAME = 'ELASTICSEARCH_INDEX_ROTATION'
 
-# Email notification settings
-email_group = []  # Update with your email list if needed
-
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
-    'email': email_group,
-    'email_on_failure': True,
+    'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
     'retry_delay': timedelta(minutes=5)
@@ -24,17 +21,17 @@ default_args = {
 dag = DAG(
     PARENT_DAG_NAME,
     default_args=default_args,
-    description='DAG to rotate Elasticsearch indices based on retention policy',
-    schedule_interval='0 0 * * *',  # Run daily at midnight
+    description='DAG to close older Elasticsearch indices every 15 minutes',
+    schedule_interval='*/15 * * * *',
     catchup=False,
     max_active_runs=1,
     start_date=datetime(2024, 3, 24),
-    tags=['prod', 'elasticsearch']
+    tags=['elasticsearch', 'rotation']
 )
 
-# Elasticsearch configuration
 ES_HOST = "http://elasticsearch1.stage-k8s.strawmine.com"
 ES_PORT = 9200
+RETENTION_COUNT = 10  # Keep latest 10 indices open, close older ones
 
 def get_es_client():
     """Create and return Elasticsearch client"""
@@ -45,96 +42,54 @@ def get_es_client():
         verify_certs=False
     )
 
-def get_indices_to_delete(es, retention_days, pattern):
-    """Get list of indices older than retention period"""
-    cutoff_date = datetime.now() - timedelta(days=retention_days)
-    indices = es.indices.get(index=pattern)
+def get_sorted_indices(es, pattern):
+    """Fetch indices matching a pattern and sort them by numeric suffix"""
+    all_indices = list(es.indices.get(index=pattern).keys())
     
-    indices_to_delete = []
-    for index in indices:
-        try:
-            index_date_str = index.split('-')[-1]
-            index_date = datetime.strptime(index_date_str, '%Y.%m.%d')
-            if index_date < cutoff_date:
-                indices_to_delete.append(index)
-        except (IndexError, ValueError) as e:
-            log.warning(f"Could not parse date from index {index}: {str(e)}")
+    indexed_list = []
+    for idx in all_indices:
+        match = re.search(r'(\d+)$', idx)  # Extract numeric suffix
+        if match:
+            indexed_list.append((idx, int(match.group(1))))
     
-    return indices_to_delete
+    indexed_list.sort(key=lambda x: x[1])  # Sort by suffix
 
-def rotate_indices(**context):
-    """Main function to handle index rotation"""
+    return [i[0] for i in indexed_list]  # Return sorted index names
+
+def close_old_indices(**context):
+    """Close older indices while keeping the latest RETENTION_COUNT open"""
     es = get_es_client()
-    
-    # Example retention config (modify as needed)
-    rotation_config = [
-        {"index_pattern": "index0-*", "retention_days": 30},
-        {"index_pattern": "index2-*", "retention_days": 15}
-    ]
-    
-    for config in rotation_config:
-        pattern = config['index_pattern']
-        retention_days = config['retention_days']
-        
-        log.info(f"Processing pattern: {pattern} with retention: {retention_days} days")
-        
+    patterns = ["index0-*", "index2-*"]  # Define index patterns
+
+    for pattern in patterns:
+        log.info(f"Processing indices matching pattern: {pattern}")
+
         try:
-            indices_to_delete = get_indices_to_delete(es, retention_days, pattern)
-            
-            if not indices_to_delete:
-                log.info(f"No indices found matching pattern {pattern} older than {retention_days} days")
+            sorted_indices = get_sorted_indices(es, pattern)
+
+            if len(sorted_indices) <= RETENTION_COUNT:
+                log.info(f"Retention met for {pattern}, no closing required.")
                 continue
-                
-            for index in indices_to_delete:
+
+            indices_to_close = sorted_indices[:-RETENTION_COUNT]  # Keep only last N open
+
+            for index in indices_to_close:
                 try:
-                    log.info(f"Deleting index: {index}")
-                    es.indices.delete(index=index)
+                    log.info(f"Closing index: {index}")
+                    es.indices.close(index=index)
                 except Exception as e:
-                    log.error(f"Error deleting index {index}: {str(e)}")
-                    
-            log.info(f"Deleted {len(indices_to_delete)} indices for pattern {pattern}")
-            
+                    log.error(f"Error closing index {index}: {str(e)}")
+
+            log.info(f"Closed {len(indices_to_close)} indices for pattern {pattern}")
+
         except Exception as e:
             log.error(f"Error processing pattern {pattern}: {str(e)}")
             raise
 
-def check_indices_status(**context):
-    """Check and report indices status"""
-    es = get_es_client()
-    
-    try:
-        health = es.cluster.health()
-        log.info(f"Cluster health: {health['status']}")
-        
-        stats = es.indices.stats()
-        total_indices = len(stats['indices'])
-        total_size = stats['_all']['total']['store']['size_in_bytes'] / (1024 * 1024 * 1024)  # Convert to GB
-        
-        log.info(f"Total indices: {total_indices}")
-        log.info(f"Total size: {total_size:.2f} GB")
-        
-        return {
-            'cluster_health': health['status'],
-            'total_indices': total_indices,
-            'total_size_gb': round(total_size, 2)
-        }
-    except Exception as e:
-        log.error(f"Error checking indices status: {str(e)}")
-        raise
-
-# Define tasks
-rotate_indices_task = PythonOperator(
-    task_id='rotate_indices',
-    python_callable=rotate_indices,
+close_indices_task = PythonOperator(
+    task_id='close_old_indices',
+    python_callable=close_old_indices,
     dag=dag
 )
 
-check_status_task = PythonOperator(
-    task_id='check_indices_status',
-    python_callable=check_indices_status,
-    dag=dag
-)
-
-# Set task dependencies
-rotate_indices_task >> check_status_task
-
+close_indices_task
