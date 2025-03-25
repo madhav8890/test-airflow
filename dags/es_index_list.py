@@ -1,57 +1,51 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from datetime import datetime, timedelta
-from opensearchpy import OpenSearch
+from elasticsearch import Elasticsearch
+import logging
 
-# OpenSearch connection details
-OS_HOST = "http://elasticsearch-headless.airflow.svc.cluster.local:9200"
+log = logging.getLogger(__name__)
 
-def list_opensearch_indices():
-    """
-    Connect to OpenSearch and list indices.
-    """
-    try:
-        # Connect to OpenSearch
-        client = OpenSearch(
-            [OS_HOST],
-            verify_certs=False
-        )
-
-        # Fetch indices
-        indices = client.cat.indices(format="json")
-
-        # Log the index details
-        for index in indices:
-            print(f"Index: {index['index']}, Status: {index['status']}, Docs: {index['docs.count']}, Size: {index['store.size']}")
-
-    except Exception as e:
-        print(f"Error fetching indices: {e}")
-        raise
-
-# Define default arguments for the DAG
 default_args = {
-    "owner": "airflow",
-    "depends_on_past": False,
-    "start_date": datetime(2025, 3, 24),
-    "email_on_failure": False,
-    "email_on_retry": False,
-    "retries": 1,
-    "retry_delay": timedelta(minutes=5),
+    'owner': 'airflow',
+    'depends_on_past': False,
+    'email_on_failure': False,
+    'email_on_retry': False,
+    'retries': 1,
+    'retry_delay': timedelta(minutes=5)
 }
 
-# Define the DAG
-with DAG(
-    "elasticsearch_list_indices",
+dag = DAG(
+    'elasticsearch_list_indices',
     default_args=default_args,
-    description="DAG to list OpenSearch indices",
-    schedule="@daily",
+    description='DAG to list all Elasticsearch indices',
+    schedule_interval='@daily',
     catchup=False,
-) as dag:
+    start_date=datetime(2024, 3, 25),
+    tags=['elasticsearch']
+)
 
-    # Define the PythonOperator task
-    list_indices_task = PythonOperator(
-        task_id="list_opensearch_indices",
-        python_callable=list_opensearch_indices
-    )
+ES_HOST = "http://elasticsearch-headless.airflow.svc.cluster.local:9200"
 
-    list_indices_task
+def list_indices():
+    """Fetch and log all indices in Elasticsearch."""
+    try:
+        es = Elasticsearch([ES_HOST])
+
+        indices = es.cat.indices(format='json')  # Fetch indices as JSON
+        log.info(f"Total Indices: {len(indices)}")
+
+        for index in indices:
+            log.info(f"Index: {index['index']}, Status: {index['status']}, Docs: {index['docs.count']}, Size: {index['store.size']}")
+
+    except Exception as e:
+        log.error(f"Error fetching indices: {str(e)}")
+
+list_indices_task = PythonOperator(
+    task_id='list_elasticsearch_indices',
+    python_callable=list_indices,
+    dag=dag
+)
+
+list_indices_task
+
