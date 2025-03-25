@@ -29,7 +29,7 @@ dag = DAG(
     tags=['elasticsearch', 'rotation']
 )
 
-ES_HOST = "http://elasticsearch1.stage-k8s.strawmine.com"
+ES_HOST = "http://elasticsearch-headless.airflow.svc.cluster.local"
 ES_PORT = 9200
 RETENTION_COUNT = 10  # Keep latest 10 indices open, close older ones
 
