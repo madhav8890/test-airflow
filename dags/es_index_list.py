@@ -26,22 +26,18 @@ dag = DAG(
 )
 
 ES_HOST = "http://elasticsearch1.stage-k8s.strawmine.com"
-ES_PORT = 9200
 
 def list_indices():
     """Fetch and log all indices in Elasticsearch."""
-    es = Elasticsearch(
-        hosts=[ES_HOST],
-        port=ES_PORT,
-        use_ssl=False,
-        verify_certs=False
-    )
-
     try:
-        indices = list(es.indices.get('*').keys())  # Fetch all index names
+        es = Elasticsearch([ES_HOST])
+
+        indices = es.cat.indices(format='json')  # Fetch indices as JSON
         log.info(f"Total Indices: {len(indices)}")
+
         for index in indices:
-            log.info(f"Index: {index}")
+            log.info(f"Index: {index['index']}, Status: {index['status']}, Docs: {index['docs.count']}, Size: {index['store.size']}")
+
     except Exception as e:
         log.error(f"Error fetching indices: {str(e)}")
 
