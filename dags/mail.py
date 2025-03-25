@@ -11,7 +11,7 @@ from email.mime.application import MIMEApplication
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 465
 SENDER_EMAIL = "madhav.prajapati@solvei8.com"
-SENDER_PASSWORD = "your_password"  # Store in Airflow Secrets!
+SENDER_PASSWORD = "xgpf inyu uvfm gpqb"  # Store in Airflow Secrets!
 RECIPIENT_EMAIL = "madhav5mar2001@gmail.com"
 FILE_NAME = "example.csv"
 
