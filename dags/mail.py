@@ -1,8 +1,8 @@
+from airflow import DAG
+from airflow.operators.python import PythonOperator
 import os
 import smtplib
 from datetime import datetime
-from airflow import DAG
-from airflow.operators.python import PythonOperator
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
@@ -11,32 +11,38 @@ from email.mime.application import MIMEApplication
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 465
 SENDER_EMAIL = "madhav.prajapati@solvei8.com"
-SENDER_PASSWORD = "xgpf inyu uvfm gpqb"  # Warning: Use Airflow Secrets
+SENDER_PASSWORD = "your_password"  # Store in Airflow Secrets!
 RECIPIENT_EMAIL = "madhav5mar2001@gmail.com"
-FILE_PATH = "/tmp/example.csv"
+FILE_NAME = "example.csv"
 
 
-def create_dummy_file():
-    """Creates a dummy CSV file."""
-    with open(FILE_PATH, "w") as f:
-        f.write("id,name,age\n1,John Doe,30\n2,Jane Doe,25")
-    print("File created:", FILE_PATH)
+def create_dummy_file(**kwargs):
+    """Generates CSV content and stores it in XCom."""
+    file_content = "id,name,age\n1,John Doe,30\n2,Jane Doe,25"
+    kwargs["ti"].xcom_push(key="file_content", value=file_content)
+    print("File content stored in XCom")
 
 
-def send_email():
-    """Sends an email with the file attached."""
+def send_email(**kwargs):
+    """Sends an email with the CSV content as an attachment."""
+    ti = kwargs["ti"]
+    file_content = ti.xcom_pull(task_ids="create_file", key="file_content")
+    
+    if not file_content:
+        raise ValueError("File content not found in XCom!")
+
     message = MIMEMultipart()
     message["Subject"] = "Email with Attachment"
     message["From"] = SENDER_EMAIL
     message["To"] = RECIPIENT_EMAIL
 
-    # Email body
+    # Attach email body
     body_part = MIMEText("This is the body of the email.")
     message.attach(body_part)
 
-    # Attach file
-    with open(FILE_PATH, "rb") as file:
-        message.attach(MIMEApplication(file.read(), Name="example.csv"))
+    # Attach file from XCom
+    attachment = MIMEApplication(file_content.encode(), Name=FILE_NAME)
+    message.attach(attachment)
 
     # Send email
     with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
@@ -62,15 +68,16 @@ dag = DAG(
 task1 = PythonOperator(
     task_id="create_file",
     python_callable=create_dummy_file,
+    provide_context=True,
     dag=dag
 )
 
 task2 = PythonOperator(
     task_id="send_email",
     python_callable=send_email,
+    provide_context=True,
     dag=dag
 )
 
-# Task dependencies
 task1 >> task2
 
