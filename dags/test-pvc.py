@@ -1,54 +1,101 @@
+from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from datetime import datetime
+from kubernetes.client import models as k8s
 import os
 
-DAG_ID = "python_operator_pvc_example"
-SHARED_VOLUME_MOUNT_PATH = "/shared"
-PVC_NAME = "airflow-shared-pvc"
-FILE_PATH = os.path.join(SHARED_VOLUME_MOUNT_PATH, "my_file.txt")
+default_args = {
+    'owner': 'airflow',
+    'depends_on_past': False,
+    'email_on_failure': False,
+    'email_on_retry': False,
+    'retries': 1,
+    'retry_delay': timedelta(minutes=5),
+}
 
-def create_file():
-    with open(FILE_PATH, "w") as f:
-        f.write("Hello from task 1!")
-    return "File created successfully"
-
-def read_file():
-    with open(FILE_PATH, "r") as f:
-        content = f.read()
-    print(f"File content: {content}")
-    return content
-
-with DAG(
-    dag_id=DAG_ID,
-    start_date=datetime(2023, 1, 1),
+dag = DAG(
+    'share_file_between_tasks',
+    default_args=default_args,
+    description='Example DAG showing file sharing between tasks using PVC',
     schedule_interval=None,
+    start_date=datetime(2025, 3, 26),
     catchup=False,
-) as dag:
-    create_file_task = PythonOperator(
-        task_id="create_file",
-        python_callable=create_file,
-        op_kwargs={},
-        volumes=[{
-            'name': 'shared-volume',
-            'persistentVolumeClaim': {
-                'claimName': PVC_NAME
-            }
-        }],
-        volume_mounts=[{'name': 'shared-volume', 'mountPath': SHARED_VOLUME_MOUNT_PATH}]
-    )
+    tags=['example'],
+)
 
-    read_file_task = PythonOperator(
-        task_id="read_file",
-        python_callable=read_file,
-        op_kwargs={},
-        volumes=[{
-            'name': 'shared-volume',
-            'persistentVolumeClaim': {
-                'claimName': PVC_NAME
-            }
-        }],
-        volume_mounts=[{'name': 'shared-volume', 'mountPath': SHARED_VOLUME_MOUNT_PATH}]
-    )
+# Shared volume configuration
+volume_mount = k8s.V1VolumeMount(
+    name='shared-data',
+    mount_path='/shared_data',
+    sub_path=None,
+    read_only=False
+)
 
-    create_file_task >> read_file_task
+volume = k8s.V1Volume(
+    name='shared-data',
+    persistent_volume_claim=k8s.V1PersistentVolumeClaimVolumeSource(
+        claim_name='airflow-shared-pvc'  # This PVC should exist in your k8s cluster
+    )
+)
+
+def write_to_file(**context):
+    """Task 1: Write data to a file"""
+    shared_file_path = '/shared_data/example.txt'
+    data = "Hello from Task 1! Timestamp: " + str(datetime.now())
+    
+    with open(shared_file_path, 'w') as f:
+        f.write(data)
+    
+    print(f"Data written to {shared_file_path}")
+
+def read_from_file(**context):
+    """Task 2: Read data from the file"""
+    shared_file_path = '/shared_data/example.txt'
+    
+    with open(shared_file_path, 'r') as f:
+        data = f.read()
+    
+    print(f"Data read from {shared_file_path}: {data}")
+
+# Task 1: Write to file
+write_task = PythonOperator(
+    task_id='write_to_file',
+    python_callable=write_to_file,
+    dag=dag,
+    executor_config={
+        "pod_override": k8s.V1Pod(
+            spec=k8s.V1PodSpec(
+                containers=[
+                    k8s.V1Container(
+                        name="base",
+                        volume_mounts=[volume_mount]
+                    )
+                ],
+                volumes=[volume]
+            )
+        )
+    }
+)
+
+# Task 2: Read from file
+read_task = PythonOperator(
+    task_id='read_from_file',
+    python_callable=read_from_file,
+    dag=dag,
+    executor_config={
+        "pod_override": k8s.V1Pod(
+            spec=k8s.V1PodSpec(
+                containers=[
+                    k8s.V1Container(
+                        name="base",
+                        volume_mounts=[volume_mount]
+                    )
+                ],
+                volumes=[volume]
+            )
+        )
+    }
+)
+
+# Set task dependencies
+write_task >> read_task
