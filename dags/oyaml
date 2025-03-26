@@ -1,0 +1,2 @@
+NAME                 STATUS    VOLUME   CAPACITY   ACCESS MODES   STORAGECLASS    VOLUMEATTRIBUTESCLASS   AGE
+airflow-shared-pvc   Pending                                      ebs-sc-delete   <unset>                 11h
