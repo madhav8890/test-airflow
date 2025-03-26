@@ -1,114 +1,49 @@
-from airflow import DAG
-from airflow.operators.python import PythonOperator
-from kubernetes.client import models as k8s
-import os
-import smtplib
-from datetime import datetime
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.mime.application import MIMEApplication
+# airflow_test_dag.py
 
-# Shared Volume Configuration
-SHARED_VOLUME_PATH = "/mnt/shared"
-SHARED_FILE_PATH = os.path.join(SHARED_VOLUME_PATH, "example.csv")
-PVC_NAME = "airflow-shared-pvc"
+from airflow.decorators import dag, task
+from kubernetes.client import models as k8s
+from datetime import datetime
+
+# Define the PVC and volume mount configuration
+pvc_name = "airflow-test-pvc"
+volume_mount_path = "/mnt/shared"
 
 volume = k8s.V1Volume(
     name="shared-data",
-    persistent_volume_claim=k8s.V1PersistentVolumeClaimVolumeSource(claim_name=PVC_NAME),
+    persistent_volume_claim=k8s.V1PersistentVolumeClaimVolumeSource(claim_name=pvc_name)
 )
 
 volume_mount = k8s.V1VolumeMount(
     name="shared-data",
-    mount_path=SHARED_VOLUME_PATH
+    mount_path=volume_mount_path
 )
 
 executor_config = {
-    "KubernetesExecutor": {
-        "pod_override": k8s.V1Pod(
-            spec=k8s.V1PodSpec(
-                containers=[k8s.V1Container(
-                    name="base",
-                    volume_mounts=[volume_mount]
-                )],
-                volumes=[volume],
-                restart_policy="Never"
-            )
+    "pod_override": k8s.V1Pod(
+        spec=k8s.V1PodSpec(
+            containers=[k8s.V1Container(name="base", volume_mounts=[volume_mount])],
+            volumes=[volume],
         )
-    }
+    )
 }
 
-# Email Configurations
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 465
-SENDER_EMAIL = "madhav.prajapati@solvei8.com"
-SENDER_PASSWORD = "xgpf inyu uvfm gpqb"  # Store securely!
-RECIPIENT_EMAIL = "madhav5mar2001@gmail.com"
+@dag(start_date=datetime(2025, 3, 26), schedule=None, dag_id="test_dag_with_pvc")
+def test_dag_with_pvc():
+    
+    @task(executor_config=executor_config)
+    def write_to_file():
+        file_path = f"{volume_mount_path}/test_file.txt"
+        with open(file_path, "w") as f:
+            f.write("Hello from Task A!")
 
+    @task(executor_config=executor_config)
+    def read_from_file():
+        file_path = f"{volume_mount_path}/test_file.txt"
+        with open(file_path, "r") as f:
+            content = f.read()
+        print(f"Content from Task A: {content}")
 
-def create_dummy_file():
-    """Writes CSV content to the shared volume."""
-    os.makedirs(SHARED_VOLUME_PATH, exist_ok=True)
-    with open(SHARED_FILE_PATH, "w") as f:
-        f.write("id,name,age\n1,John Doe,30\n2,Jane Doe,25")
-    print(f"File written: {SHARED_FILE_PATH}")
+    write_to_file() >> read_from_file()
 
-
-def send_email():
-    """Reads the file from the shared volume and sends an email."""
-    if not os.path.exists(SHARED_FILE_PATH):
-        raise FileNotFoundError(f"File not found: {SHARED_FILE_PATH}")
-
-    with open(SHARED_FILE_PATH, "rb") as f:
-        file_content = f.read()
-
-    message = MIMEMultipart()
-    message["Subject"] = "Email with Attachment"
-    message["From"] = SENDER_EMAIL
-    message["To"] = RECIPIENT_EMAIL
-
-    # Attach email body
-    body_part = MIMEText("This is the body of the email.")
-    message.attach(body_part)
-
-    # Attach file from shared volume
-    attachment = MIMEApplication(file_content, Name="example.csv")
-    message.attach(attachment)
-
-    # Send email
-    with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
-        server.login(SENDER_EMAIL, SENDER_PASSWORD)
-        server.sendmail(SENDER_EMAIL, RECIPIENT_EMAIL, message.as_string())
-
-    print("Email sent successfully!")
-
-
-# Airflow DAG definition
-default_args = {
-    "owner": "airflow",
-    "start_date": datetime(2024, 3, 24),
-    "catchup": False
-}
-
-dag = DAG(
-    "email_with_shared_volume",
-    default_args=default_args,
-    schedule_interval=None
-)
-
-task1 = PythonOperator(
-    task_id="create_file",
-    python_callable=create_dummy_file,
-    executor_config=executor_config,
-    dag=dag
-)
-
-task2 = PythonOperator(
-    task_id="send_email",
-    python_callable=send_email,
-    executor_config=executor_config,
-    dag=dag
-)
-
-task1 >> task2
-
+# Instantiate the DAG
+dag_instance = test_dag_with_pvc()
