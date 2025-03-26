@@ -11,7 +11,7 @@ from kubernetes.client import models as k8s
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 465
 SENDER_EMAIL = "madhav.prajapati@solvei8.com"
-SENDER_PASSWORD = "your-app-password"  # Use Airflow Secrets
+SENDER_PASSWORD = "xgpf inyu uvfm gpqb"  # Use Airflow Secrets
 RECIPIENT_EMAIL = "madhav5mar2001@gmail.com"
 
 # Common PVC pod override configuration
