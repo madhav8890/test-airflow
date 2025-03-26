@@ -18,7 +18,7 @@ dag = DAG(
 
 # KubernetesPodOperator to launch an NGINX pod
 nginx_pod = KubernetesPodOperator(
-    task_id="run_nginx_pod",
+    task_id="nginx",
     name="nginx-pod",
     namespace="airflow",  # Change this to match your Airflow namespace
     image="nginx:latest",
