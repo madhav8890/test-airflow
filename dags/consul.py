@@ -19,7 +19,7 @@ with DAG(
 
     fetch_kv = BashOperator(
         task_id="fetch_consul_kv",
-        bash_command=f"curl -s {CONSUL_URL} | jq '.'",
+        bash_command=f"curl -s {CONSUL_URL}",
     )
 
     fetch_kv
