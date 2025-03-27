@@ -1,7 +1,7 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from datetime import datetime, timedelta
-from elasticsearch import Elasticsearch
+import requests
 import logging
 
 log = logging.getLogger(__name__)
@@ -26,13 +26,19 @@ dag = DAG(
 )
 
 ES_HOST = "http://elasticsearch-headless.airflow.svc.cluster.local:9200"
+HEADERS = {"Content-Type": "application/json"}
 
 def list_indices():
-    """Fetch and log all indices in Elasticsearch."""
+    """Fetch and log all indices in Elasticsearch using REST API."""
     try:
-        es = Elasticsearch([ES_HOST])
+        url = f"{ES_HOST}/_cat/indices?h=index,status,docs.count,store.size&format=json"
+        response = requests.get(url, headers=HEADERS)
 
-        indices = es.cat.indices(format='json')  # Fetch indices as JSON
+        if response.status_code != 200:
+            log.error(f"Failed to fetch indices: {response.text}")
+            return
+
+        indices = response.json()  # Convert response to JSON
         log.info(f"Total Indices: {len(indices)}")
 
         for index in indices:
@@ -48,4 +54,3 @@ list_indices_task = PythonOperator(
 )
 
 list_indices_task
-
