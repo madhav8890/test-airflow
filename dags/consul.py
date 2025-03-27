@@ -9,6 +9,8 @@ from kubernetes.client import models as k8s
 
 # Consul Configuration
 CONSUL_ENDPOINT = "http://consul-consul-server.airflow.svc.cluster.local:8500/v1/kv"
+TEST_FOLDER = "test/"
+BACKUP_FOLDER = "backup/"
 BACKUP_FILE = "/shared_data/consul_backup.json"
 PROCESSED_FILE = "/shared_data/consul_backup_processed.json"
 
@@ -46,15 +48,15 @@ default_args = {
 }
 
 dag = DAG(
-    "consul_kv_backup",
+    "consul_test_to_backup",
     default_args=default_args,
     schedule_interval=None,
     catchup=False,
 )
 
-def fetch_and_backup_consul_kv():
-    """Fetches all Consul KV pairs and saves them as a backup file."""
-    response = requests.get(f"{CONSUL_ENDPOINT}/?recurse")
+def fetch_test_folder_kv():
+    """Fetches all Consul KV pairs from the `test/` folder and saves them to a backup file."""
+    response = requests.get(f"{CONSUL_ENDPOINT}/{TEST_FOLDER}?recurse")
     
     if response.status_code != 200:
         raise Exception(f"Failed to fetch KV data: {response.text}")
@@ -66,8 +68,8 @@ def fetch_and_backup_consul_kv():
 
     print(f"Backup saved to {BACKUP_FILE}")
 
-def read_consul_backup():
-    """Reads Consul KV backup from PVC, decodes base64 values, and saves the processed file."""
+def process_consul_backup():
+    """Reads KV backup from PVC, decodes base64 values, and saves the processed file."""
     if not os.path.exists(BACKUP_FILE):
         raise FileNotFoundError(f"Backup file not found: {BACKUP_FILE}")
 
@@ -79,6 +81,9 @@ def read_consul_backup():
         key = entry.get("Key")
         value = entry.get("Value")
 
+        # Remove 'test/' prefix from the key
+        new_key = key.replace(TEST_FOLDER, BACKUP_FOLDER, 1)
+
         if value:
             try:
                 value_decoded = base64.b64decode(value).decode("utf-8")
@@ -87,15 +92,15 @@ def read_consul_backup():
         else:
             value_decoded = ""
 
-        processed_data.append({"Key": key, "Value": value_decoded})
+        processed_data.append({"Key": new_key, "Value": value_decoded})
 
     with open(PROCESSED_FILE, "w") as f:
         json.dump(processed_data, f, indent=2)
 
     print("Processed KV backup saved.")
 
-def upload_to_consul():
-    """Uploads processed KV data back to Consul."""
+def upload_to_backup_folder():
+    """Uploads processed KV data to the `backup/` folder in Consul."""
     if not os.path.exists(PROCESSED_FILE):
         raise FileNotFoundError(f"Processed file not found: {PROCESSED_FILE}")
 
@@ -103,7 +108,7 @@ def upload_to_consul():
         data = json.load(f)
 
     for entry in data:
-        key = entry["Key"]
+        key = entry["Key"]  # Already updated to `backup/`
         value = entry["Value"]
         url = f"{CONSUL_ENDPOINT}/{key}"
 
@@ -113,30 +118,30 @@ def upload_to_consul():
         else:
             print(f"Failed to upload {key}: {response.text}")
 
-# Task 1: Fetch KV pairs and create a backup
-fetch_backup_task = PythonOperator(
-    task_id="fetch_consul_backup",
-    python_callable=fetch_and_backup_consul_kv,
+# Task 1: Fetch KV pairs from `test/`
+fetch_task = PythonOperator(
+    task_id="fetch_test_folder_kv",
+    python_callable=fetch_test_folder_kv,
     dag=dag,
     executor_config={"pod_override": pod_override}
 )
 
-# Task 2: Read and process Consul KV backup
-read_task = PythonOperator(
-    task_id="read_consul_backup",
-    python_callable=read_consul_backup,
+# Task 2: Process KV pairs and change folder from `test/` to `backup/`
+process_task = PythonOperator(
+    task_id="process_consul_backup",
+    python_callable=process_consul_backup,
     dag=dag,
     executor_config={"pod_override": pod_override}
 )
 
-# Task 3: Upload processed KV back to Consul
+# Task 3: Upload processed KV pairs to `backup/`
 upload_task = PythonOperator(
-    task_id="upload_to_consul",
-    python_callable=upload_to_consul,
+    task_id="upload_to_backup_folder",
+    python_callable=upload_to_backup_folder,
     dag=dag,
     executor_config={"pod_override": pod_override}
 )
 
 # Define task dependencies
-fetch_backup_task >> read_task >> upload_task
+fetch_task >> process_task >> upload_task
 
