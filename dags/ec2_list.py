@@ -11,7 +11,7 @@ pod_override = k8s.V1Pod(
                 name="base",
                 image="apache/airflow:2.7.2",  # Use your Airflow image
                 command=["/bin/bash", "-c"],
-                args=["pip install boto3 requests && exec airflow tasks run"],
+                args=["pip list && pip install boto3 requests && exec airflow tasks run && pip list"],
             )
         ]
     )
