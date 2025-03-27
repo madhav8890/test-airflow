@@ -52,6 +52,20 @@ dag = DAG(
     catchup=False,
 )
 
+def fetch_and_backup_consul_kv():
+    """Fetches all Consul KV pairs and saves them as a backup file."""
+    response = requests.get(f"{CONSUL_ENDPOINT}/?recurse")
+    
+    if response.status_code != 200:
+        raise Exception(f"Failed to fetch KV data: {response.text}")
+
+    kv_data = response.json()
+
+    with open(BACKUP_FILE, "w") as f:
+        json.dump(kv_data, f, indent=2)
+
+    print(f"Backup saved to {BACKUP_FILE}")
+
 def read_consul_backup():
     """Reads Consul KV backup from PVC, decodes base64 values, and saves the processed file."""
     if not os.path.exists(BACKUP_FILE):
@@ -99,7 +113,15 @@ def upload_to_consul():
         else:
             print(f"Failed to upload {key}: {response.text}")
 
-# Task 1: Read and process Consul KV backup
+# Task 1: Fetch KV pairs and create a backup
+fetch_backup_task = PythonOperator(
+    task_id="fetch_consul_backup",
+    python_callable=fetch_and_backup_consul_kv,
+    dag=dag,
+    executor_config={"pod_override": pod_override}
+)
+
+# Task 2: Read and process Consul KV backup
 read_task = PythonOperator(
     task_id="read_consul_backup",
     python_callable=read_consul_backup,
@@ -107,7 +129,7 @@ read_task = PythonOperator(
     executor_config={"pod_override": pod_override}
 )
 
-# Task 2: Upload processed KV back to Consul
+# Task 3: Upload processed KV back to Consul
 upload_task = PythonOperator(
     task_id="upload_to_consul",
     python_callable=upload_to_consul,
@@ -116,4 +138,5 @@ upload_task = PythonOperator(
 )
 
 # Define task dependencies
-read_task >> upload_task
+fetch_backup_task >> read_task >> upload_task
+
