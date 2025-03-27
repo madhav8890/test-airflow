@@ -7,7 +7,7 @@ import os
 from kubernetes.client import models as k8s
 
 # Elasticsearch Configuration
-ES_HOST = "http://elasticsearch-service.airflow.svc.cluster.local:9200"
+ES_HOST = "http://elasticsearch-headless.airflow.svc.cluster.local:9200"
 INDEX_FILE = "/shared_data/indices.json"
 
 # Kubernetes PVC pod override configuration
