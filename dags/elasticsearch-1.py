@@ -62,20 +62,7 @@ def fetch_indices():
     with open(INDEX_FILE, "w") as f:
         json.dump(indices, f, indent=2)
 
-    print(f"Saved indices to {INDEX_FILE}")
-
-def verify_indices():
-    """Verify the contents of the stored indices file."""
-    if not os.path.exists(INDEX_FILE):
-        raise FileNotFoundError(f"Indices file not found: {INDEX_FILE}")
-
-    with open(INDEX_FILE, "r") as f:
-        indices = json.load(f)
-
-    if not indices:
-        raise ValueError("Index file is empty, something went wrong!")
-
-    print(f"Successfully verified {len(indices)} indices.")
+    print(f"Saved {len(indices)} indices to {INDEX_FILE}")
 
 def close_old_indices():
     """Close indices older than 1 day and not already closed."""
@@ -91,12 +78,16 @@ def close_old_indices():
         index_name = index["index"]
         index_status = index["status"]  # Check if already closed
         try:
-            date_str = index_name.split("-")[-1]
+            date_str = index_name.split("-")[-1]  # Extract date from name
             index_date = datetime.strptime(date_str, "%Y-%m-%d").date()
         except ValueError:
-            continue  # Skip indices with unexpected format
+            print(f"Skipping {index_name}: Invalid date format")
+            continue
 
-        if (today - index_date).days > 1 and index_status == "open":
+        days_old = (today - index_date).days
+        print(f"Checking {index_name}: {days_old} days old")
+
+        if days_old > 1 and index_status == "open":
             response = requests.post(f"{ES_HOST}/{index_name}/_close")
             if response.status_code == 200:
                 print(f"Closed index: {index_name}")
@@ -116,12 +107,16 @@ def delete_old_indices():
     for index in indices:
         index_name = index["index"]
         try:
-            date_str = index_name.split("-")[-1]
+            date_str = index_name.split("-")[-1]  # Extract date from name
             index_date = datetime.strptime(date_str, "%Y-%m-%d").date()
         except ValueError:
-            continue  # Skip indices with unexpected format
+            print(f"Skipping {index_name}: Invalid date format")
+            continue
 
-        if (today - index_date).days > 2:
+        days_old = (today - index_date).days
+        print(f"Checking {index_name}: {days_old} days old")
+
+        if days_old > 2:
             response = requests.delete(f"{ES_HOST}/{index_name}")
             if response.status_code == 200:
                 print(f"Deleted index: {index_name}")
@@ -136,15 +131,7 @@ fetch_task = PythonOperator(
     executor_config={"pod_override": pod_override}
 )
 
-# Task 2: Verify indices file
-verify_task = PythonOperator(
-    task_id="verify_indices",
-    python_callable=verify_indices,
-    dag=dag,
-    executor_config={"pod_override": pod_override}
-)
-
-# Task 3: Close indices older than 1 day
+# Task 2: Close indices older than 1 day
 close_task = PythonOperator(
     task_id="close_old_indices",
     python_callable=close_old_indices,
@@ -152,7 +139,7 @@ close_task = PythonOperator(
     executor_config={"pod_override": pod_override}
 )
 
-# Task 4: Delete indices older than 2 days
+# Task 3: Delete indices older than 2 days
 delete_task = PythonOperator(
     task_id="delete_old_indices",
     python_callable=delete_old_indices,
@@ -161,5 +148,5 @@ delete_task = PythonOperator(
 )
 
 # Define task dependencies
-fetch_task >> verify_task >> close_task >> delete_task
+fetch_task >> close_task >> delete_task
 
