@@ -3,6 +3,21 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from datetime import datetime
 
+from kubernetes.client import models as k8s
+
+pod_override = k8s.V1Pod(
+    spec=k8s.V1PodSpec(
+        containers=[
+            k8s.V1Container(
+                name="base",
+                image="apache/airflow:2.7.2",  # Use your Airflow image
+                command=["/bin/bash", "-c"],
+                args=["pip list && pip install boto3 requests && exec airflow tasks run && pip list"],
+            )
+        ]
+    )
+)
+
 def check_aws_connection():
     try:
         # Create a boto3 client for EC2
