@@ -64,6 +64,19 @@ def fetch_indices():
 
     print(f"Saved indices to {INDEX_FILE}")
 
+def verify_indices():
+    """Verify the contents of the stored indices file."""
+    if not os.path.exists(INDEX_FILE):
+        raise FileNotFoundError(f"Indices file not found: {INDEX_FILE}")
+
+    with open(INDEX_FILE, "r") as f:
+        indices = json.load(f)
+
+    if not indices:
+        raise ValueError("Index file is empty, something went wrong!")
+
+    print(f"Successfully verified {len(indices)} indices.")
+
 def close_old_indices():
     """Close indices older than 1 day."""
     if not os.path.exists(INDEX_FILE):
@@ -122,7 +135,15 @@ fetch_task = PythonOperator(
     executor_config={"pod_override": pod_override}
 )
 
-# Task 2: Close indices older than 1 day
+# Task 2: Verify indices file
+verify_task = PythonOperator(
+    task_id="verify_indices",
+    python_callable=verify_indices,
+    dag=dag,
+    executor_config={"pod_override": pod_override}
+)
+
+# Task 3: Close indices older than 1 day
 close_task = PythonOperator(
     task_id="close_old_indices",
     python_callable=close_old_indices,
@@ -130,7 +151,7 @@ close_task = PythonOperator(
     executor_config={"pod_override": pod_override}
 )
 
-# Task 3: Delete indices older than 2 days
+# Task 4: Delete indices older than 2 days
 delete_task = PythonOperator(
     task_id="delete_old_indices",
     python_callable=delete_old_indices,
@@ -139,5 +160,5 @@ delete_task = PythonOperator(
 )
 
 # Define task dependencies
-fetch_task >> close_task >> delete_task
+fetch_task >> verify_task >> close_task >> delete_task
 
