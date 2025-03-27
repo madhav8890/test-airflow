@@ -5,7 +5,7 @@ import boto3
 
 def list_ec2_instances(**kwargs):
     """Fetch EC2 instances and store them in XCom."""
-    ec2 = boto3.client('ec2')  # Uses default AWS authentication
+    ec2 = boto3.client('ec2', region_name='ap-southeast-1')  # Uses default AWS authentication
     instances = ec2.describe_instances()
 
     instance_info = []
