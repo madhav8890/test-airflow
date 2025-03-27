@@ -2,6 +2,20 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from datetime import datetime, timedelta
 import boto3
+from kubernetes.client import models as k8s
+
+pod_override = k8s.V1Pod(
+    spec=k8s.V1PodSpec(
+        containers=[
+            k8s.V1Container(
+                name="base",
+                image="apache/airflow:2.7.2",  # Use your Airflow image
+                command=["/bin/bash", "-c"],
+                args=["pip install boto3 requests && exec airflow tasks run"],
+            )
+        ]
+    )
+)
 
 def list_ec2_instances(**kwargs):
     """Fetch EC2 instances and store them in XCom."""
@@ -54,6 +68,7 @@ fetch_instances_task = PythonOperator(
     python_callable=list_ec2_instances,
     provide_context=True,
     dag=dag,
+    executor_config={"pod_override": pod_override}
 )
 
 # Task 2: Retrieve and print instances from XCom
