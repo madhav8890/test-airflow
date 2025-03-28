@@ -7,23 +7,21 @@ default_args = {
     "owner": "airflow",
     "depends_on_past": False,
     "start_date": datetime(2025, 3, 28),
-    "retries": 2,
+    "retries": 1,
     "retry_delay": timedelta(minutes=5),
 }
 
-# Define Shared Persistent Volume
-SHARED_VOLUME_NAME = "shared-data"
-PVC_NAME = "airflow-shared-pvc"
-BACKUP_PATH = "/shared_data/mongo_backup_$(date +%Y%m%d_%H%M%S)"
+# Define backup location
+BACKUP_PATH = "/shared_data/mongo_backup"
 
 # Common volume configuration
 volume_config = {
-    "name": SHARED_VOLUME_NAME,
-    "persistentVolumeClaim": {"claimName": PVC_NAME},
+    "name": "shared-data",
+    "persistentVolumeClaim": {"claimName": "airflow-shared-pvc"},
 }
 
 volume_mount_config = {
-    "name": SHARED_VOLUME_NAME,
+    "name": "shared-data",
     "mountPath": "/shared_data"
 }
 
@@ -31,29 +29,13 @@ volume_mount_config = {
 dag = DAG(
     "mongodb_backup",
     default_args=default_args,
-    schedule_interval=None,  # Run manually
+    schedule_interval=None,
     catchup=False,
     tags=['mongodb', 'backup'],
     description='MongoDB backup DAG using mongodump'
 )
 
-# Task 1: Create backup directory
-init_backup_task = KubernetesPodOperator(
-    task_id="init_backup_dir",
-    name="init-backup-dir",
-    namespace="airflow",
-    image="busybox",
-    cmds=["sh", "-c"],
-    arguments=[
-        "mkdir -p /shared_data && echo 'Backup directory initialized'"
-    ],
-    volumes=[volume_config],
-    volume_mounts=[volume_mount_config],
-    is_delete_operator_pod=True,
-    dag=dag,
-)
-
-# Task 2: KubernetesPodOperator for Mongodump
+# Task 1: Run mongodump
 mongodump_task = KubernetesPodOperator(
     task_id="run_mongodump",
     name="mongo-backup-job",
@@ -61,14 +43,7 @@ mongodump_task = KubernetesPodOperator(
     image="mongo:4.4",
     cmds=["sh", "-c"],
     arguments=[
-        f"""
-        mongodump \
-          --host=mongodb-service.airflow.svc.cluster.local \
-          --port=27017 \
-          --out={BACKUP_PATH} && \
-        echo 'Backup completed successfully!' || \
-        (echo 'Backup failed!'; exit 1)
-        """
+        f"mongodump --host=mongodb-service.airflow.svc.cluster.local --port=27017 --out={BACKUP_PATH}"
     ],
     volumes=[volume_config],
     volume_mounts=[volume_mount_config],
@@ -76,7 +51,7 @@ mongodump_task = KubernetesPodOperator(
     dag=dag,
 )
 
-# Task 3: Verify backup and list files
+# Task 2: Verify backup
 verify_backup_task = KubernetesPodOperator(
     task_id="verify_backup",
     name="verify-backup",
@@ -84,18 +59,7 @@ verify_backup_task = KubernetesPodOperator(
     image="busybox",
     cmds=["sh", "-c"],
     arguments=[
-        f"""
-        if [ -d "{BACKUP_PATH}" ]; then
-            echo "Backup directory exists"
-            echo "Backup contents:"
-            ls -lah {BACKUP_PATH}
-            echo "Backup size:"
-            du -sh {BACKUP_PATH}
-        else
-            echo "Backup directory not found!"
-            exit 1
-        fi
-        """
+        f"ls -lah {BACKUP_PATH}"
     ],
     volumes=[volume_config],
     volume_mounts=[volume_mount_config],
@@ -104,4 +68,4 @@ verify_backup_task = KubernetesPodOperator(
 )
 
 # Define task dependencies
-init_backup_task >> mongodump_task >> verify_backup_task
+mongodump_task >> verify_backup_task
