@@ -4,7 +4,7 @@ from airflow.operators.python import PythonOperator
 from airflow.hooks.S3_hook import S3Hook
 
 def list_s3_buckets():
-    hook = S3Hook(aws_conn_id='aws_default')  # Replace 'aws_conn' with your Airflow connection ID
+    hook = S3Hook(aws_conn_id='my_aws')  # Replace 'aws_conn' with your Airflow connection ID
     buckets = hook.get_conn().list_buckets()
     for bucket in buckets['Buckets']:
         print(f"Bucket Name: {bucket['Name']}")
