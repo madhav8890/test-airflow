@@ -1,31 +1,35 @@
 from airflow import DAG
+from airflow.providers.cncf.kubernetes.operators.kubernetes_pod import KubernetesPodOperator
 from airflow.providers.amazon.aws.hooks.base_aws import AwsBaseHook
-from airflow.operators.python import PythonOperator
 from airflow.utils.dates import days_ago
-import boto3
 
-def list_ec2_instances():
-    aws_hook = AwsBaseHook(aws_conn_id='my_aws', client_type='ec2')
-    client = aws_hook.get_client_type('ec2')
-    
-    instances = client.describe_instances()
-    
-    for reservation in instances['Reservations']:
-        for instance in reservation['Instances']:
-            print(f"Instance ID: {instance['InstanceId']}, State: {instance['State']['Name']}")
+# Fetch AWS credentials from Airflow connection
+aws_hook = AwsBaseHook(aws_conn_id='my_aws', client_type='sts')
+credentials = aws_hook.get_credentials()
 
 # Define the DAG
 dag = DAG(
-    'list_ec2_instances',
+    'list_ec2_instances_k8s',
     schedule_interval='@daily',
     start_date=days_ago(1),
     catchup=False,
 )
 
-# Python Operator to List Instances
-list_instances_task = PythonOperator(
+# KubernetesPodOperator to run AWS CLI
+list_instances_task = KubernetesPodOperator(
     task_id='list_instances',
-    python_callable=list_ec2_instances,
+    name='aws-cli-list-instances',
+    namespace='default',  # Change namespace if needed
+    image='amazon/aws-cli',  # AWS CLI official image
+    cmds=["sh", "-c"],
+    arguments=[
+        "aws ec2 describe-instances --query 'Reservations[*].Instances[*].[InstanceId,State.Name]' --output table"
+    ],
+    env_vars={
+        'AWS_ACCESS_KEY_ID': credentials.access_key,
+        'AWS_SECRET_ACCESS_KEY': credentials.secret_key,
+        'AWS_DEFAULT_REGION': 'us-east-1',  # Change as needed
+    },
     dag=dag,
 )
 
