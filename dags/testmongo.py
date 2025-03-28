@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.providers.cncf.kubernetes.operators.kubernetes_pod import KubernetesPodOperator
+from kubernetes.client import models as k8s
 
 # DAG default arguments
 default_args = {
@@ -14,16 +15,18 @@ default_args = {
 # Define backup location
 BACKUP_PATH = "/shared_data/mongo_backup"
 
-# Common volume configuration
-volume_config = {
-    "name": "shared-data",
-    "persistentVolumeClaim": {"claimName": "airflow-shared-pvc"},
-}
+# Create proper Kubernetes volume and volume mount objects
+volume = k8s.V1Volume(
+    name="shared-data",
+    persistent_volume_claim=k8s.V1PersistentVolumeClaimVolumeSource(
+        claim_name="airflow-shared-pvc"
+    )
+)
 
-volume_mount_config = {
-    "name": "shared-data",
-    "mountPath": "/shared_data"
-}
+volume_mount = k8s.V1VolumeMount(
+    name="shared-data",
+    mount_path="/shared_data"
+)
 
 # DAG definition
 dag = DAG(
@@ -45,8 +48,8 @@ mongodump_task = KubernetesPodOperator(
     arguments=[
         f"mongodump --host=mongodb-service.airflow.svc.cluster.local --port=27017 --out={BACKUP_PATH}"
     ],
-    volumes=[volume_config],
-    volume_mounts=[volume_mount_config],
+    volumes=[volume],
+    volume_mounts=[volume_mount],
     is_delete_operator_pod=True,
     dag=dag,
 )
@@ -61,8 +64,8 @@ verify_backup_task = KubernetesPodOperator(
     arguments=[
         f"ls -lah {BACKUP_PATH}"
     ],
-    volumes=[volume_config],
-    volume_mounts=[volume_mount_config],
+    volumes=[volume],
+    volume_mounts=[volume_mount],
     is_delete_operator_pod=True,
     dag=dag,
 )
