@@ -15,7 +15,8 @@ def list_s3_buckets():
     s3_client = boto3.client(
         's3',
         aws_access_key_id=aws_access_key,
-        aws_secret_access_key=aws_secret_key
+        aws_secret_access_key=aws_secret_key,
+        region_name='ap-southeast-1'
     )
     response = s3_client.list_buckets()
     for bucket in response['Buckets']:
@@ -37,6 +38,6 @@ with DAG(
 
     list_buckets_task = PythonOperator(
         task_id='list_s3_buckets_task',
-        python_callable=get_aws_credentials,
+        python_callable=list_s3_buckets,
     )
 
