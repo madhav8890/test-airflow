@@ -17,7 +17,7 @@ default_args = {
 }
 
 with DAG(
-    dag_id='list_s3_buckets_dag',
+    dag_id='list_s3_buckets_dag-1',
     default_args=default_args,
     schedule_interval=None,  # Run on demand
     catchup=False,
