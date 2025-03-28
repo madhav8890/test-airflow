@@ -1,4 +1,3 @@
-import json
 from airflow import DAG
 from airflow.providers.amazon.aws.hooks.ec2 import EC2Hook
 from airflow.operators.python import PythonOperator
@@ -21,17 +20,18 @@ with DAG(
 ) as dag:
 
     def list_instances(**kwargs):
-        # Create an EC2 hook using the connection ID
-        ec2_hook = EC2Hook(aws_conn_id='my_aws')
+        # Initialize EC2Hook with client_type API
+        ec2_hook = EC2Hook(aws_conn_id='my_aws', api_type="client_type")
         
-        # Get all instance IDs
-        instance_ids = ec2_hook.get_instance_ids()
+        # Get all instance IDs using the client API
+        client = ec2_hook.get_conn()
+        response = client.describe_instances()
         
-        # Print out the instance IDs and their states
-        print("EC2 Instance IDs and their states:")
-        for instance_id in instance_ids:
-            instance_info = ec2_hook.get_instance(instance_id)
-            print(f"Instance ID: {instance_info.id}, State: {instance_info.state['Name']}")
+        # Print out instance details
+        print("EC2 Instance Details:")
+        for reservation in response['Reservations']:
+            for instance in reservation['Instances']:
+                print(f"Instance ID: {instance['InstanceId']}, State: {instance['State']['Name']}")
 
     # Define a PythonOperator to execute the function
     list_ec2_instances_task = PythonOperator(
