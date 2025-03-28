@@ -1,38 +1,32 @@
-from datetime import datetime
 from airflow import DAG
+from airflow.providers.amazon.aws.hooks.base_aws import AwsBaseHook
 from airflow.operators.python import PythonOperator
+from airflow.utils.dates import days_ago
 import boto3
 
-def list_s3_buckets():
-    # Create a Boto3 client for S3
-    s3_client = boto3.client('s3')
+def list_ec2_instances():
+    aws_hook = AwsBaseHook(aws_conn_id='my_aws', client_type='ec2')
+    client = aws_hook.get_client_type('ec2')
     
-    # List all buckets
-    response = s3_client.list_buckets()
+    instances = client.describe_instances()
     
-    # Print the bucket names
-    for bucket in response.get('Buckets', []):
-        print(f"Bucket Name: {bucket['Name']}")
-
-# Default arguments for the DAG
-default_args = {
-    'owner': 'airflow',
-    'depends_on_past': False,
-    'start_date': datetime(2025, 3, 28),
-    'retries': 1,
-}
+    for reservation in instances['Reservations']:
+        for instance in reservation['Instances']:
+            print(f"Instance ID: {instance['InstanceId']}, State: {instance['State']['Name']}")
 
 # Define the DAG
-with DAG(
-    dag_id='list_s3_buckets_with_boto3',
-    default_args=default_args,
-    schedule_interval=None,  # Run on demand
+dag = DAG(
+    'list_ec2_instances',
+    schedule_interval='@daily',
+    start_date=days_ago(1),
     catchup=False,
-) as dag:
-    
-    # Task to list S3 buckets
-    list_buckets_task = PythonOperator(
-        task_id='list_s3_buckets_task',
-        python_callable=list_s3_buckets,
-    )
+)
 
+# Python Operator to List Instances
+list_instances_task = PythonOperator(
+    task_id='list_instances',
+    python_callable=list_ec2_instances,
+    dag=dag,
+)
+
+list_instances_task
