@@ -37,6 +37,6 @@ with DAG(
 
     list_buckets_task = PythonOperator(
         task_id='list_s3_buckets_task',
-        python_callable=list_s3_buckets,
+        python_callable=get_aws_credentials,
     )
 
