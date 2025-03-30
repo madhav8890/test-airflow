@@ -16,7 +16,7 @@ default_args = {
 }
 
 # Define paths and S3 details
-BACKUP_PATH = "/shared_data/mongo_backup"
+BACKUP_PATH = "/shared_data/mongo_backup-1"
 S3_BUCKET = "mongo-backups-bucket"  # Replace with your S3 bucket name
 S3_KEY_PREFIX = "mongodb-backups"
 
