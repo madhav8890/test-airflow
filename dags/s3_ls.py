@@ -14,6 +14,9 @@ default_args = {
     'depends_on_past': False,
     'start_date': datetime(2025, 3, 28),
     'retries': 1,
+    'email': ['madhav5mar2001@gmail.com'],  # Recipient email
+    'email_on_failure': True,
+    'email_on_retry': False,
 }
 
 with DAG(
