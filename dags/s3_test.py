@@ -1,6 +1,7 @@
 from datetime import datetime
 from airflow import DAG
 from airflow.hooks.S3_hook import S3Hook
+from airflow.operators.python import PythonOperator
 
 def test_aws_s3_connection():
     # Using the 'aws_default' connection ID configured in Airflow UI
