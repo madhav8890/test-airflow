@@ -2,7 +2,10 @@ from datetime import datetime
 from airflow import DAG
 from airflow.hooks.S3_hook import S3Hook
 from airflow.operators.python import PythonOperator
+import os
 
+print("AWS_ACCESS_KEY_ID:", os.environ.get("AWS_ACCESS_KEY_ID"))
+print("AWS_SECRET_ACCESS_KEY:", os.environ.get("AWS_SECRET_ACCESS_KEY"))
 def test_aws_s3_connection():
     # Using the 'aws_default' connection ID configured in Airflow UI
     s3_hook = S3Hook(aws_conn_id='aws_default')
