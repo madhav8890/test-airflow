@@ -1,49 +1,29 @@
-import boto3
 from airflow import DAG
+from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.operators.python import PythonOperator
 from datetime import datetime
 
-from kubernetes.client import models as k8s
-
-pod_override = k8s.V1Pod(
-    spec=k8s.V1PodSpec(
-        containers=[
-            k8s.V1Container(
-                name="base",
-                image="apache/airflow:2.7.2",  # Use your Airflow image
-                command=["/bin/bash", "-c"],
-                args=["pip list && pip install boto3 requests && exec airflow tasks run && pip list"],
-            )
-        ]
-    )
-)
-
-def check_aws_connection():
+def test_aws_s3_connection():
+    """Test AWS S3 connection using Airflow"""
     try:
-        # Create a boto3 client for EC2
-        ec2 = boto3.client("ec2", region_name='ap-southeast-1')
-
-        # Test the connection by listing available regions
-        regions = ec2.describe_regions()
-        print("AWS Connection Successful. Available Regions:")
-        for region in regions["Regions"]:
-            print(region["RegionName"])
-
+        aws_s3_hook = S3Hook(aws_conn_id="aws_default")
+        buckets = aws_s3_hook.list_buckets()
+        print(f"✅ AWS S3 Connection Successful! Buckets: {buckets}")
     except Exception as e:
-        print(f"AWS Connection Failed: {str(e)}")
+        print(f"❌ AWS S3 Connection Failed: {e}")
         raise
 
 with DAG(
-    "test_aws_connection",
+    dag_id="test_minio_aws_connectivity",
     schedule_interval=None,
-    start_date=datetime(2024, 3, 27),
+    start_date=datetime(2024, 3, 31),
     catchup=False,
+    tags=["aws", "minio", "test"]
 ) as dag:
 
-    test_connection = PythonOperator(
-        task_id="test_aws_connectivity",
-        python_callable=check_aws_connection,
+    test_aws_s3 = PythonOperator(
+        task_id="test_aws_s3_connectivity",
+        python_callable=test_aws_s3_connection,
     )
 
-    test_connection
-
+    test_aws_s3  # MinIO check runs before AWS check
