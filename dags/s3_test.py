@@ -1,30 +1,29 @@
 from datetime import datetime
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from airflow.hooks.S3_hook import S3Hook
+from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 
-def list_s3_buckets():
-    hook = S3Hook(aws_conn_id='aws_default')  # Replace 'aws_conn' with your Airflow connection ID
-    buckets = hook.get_conn().list_buckets()
-    for bucket in buckets['Buckets']:
-        print(f"Bucket Name: {bucket['Name']}")
-
-default_args = {
-    'owner': 'airflow',
-    'depends_on_past': False,
-    'start_date': datetime(2025, 3, 28),
-    'retries': 1,
-}
+def check_s3_buckets():
+    try:
+        s3_hook = S3Hook(aws_conn_id='aws_default')  # Use Airflow Connection
+        buckets = s3_hook.get_conn().list_buckets()
+        print("✅ AWS S3 Connection Successful! Available Buckets:")
+        for bucket in buckets['Buckets']:
+            print(f"- {bucket['Name']}")
+    except Exception as e:
+        print(f"❌ AWS S3 Connection Failed: {str(e)}")
+        raise
 
 with DAG(
-    dag_id='list_s3_buckets_dag-1',
-    default_args=default_args,
-    schedule_interval=None,  # Run on demand
+    "test_aws_connectivity",
+    schedule_interval=None,
+    start_date=datetime(2025, 3, 31),
     catchup=False,
 ) as dag:
-    
-    list_buckets_task = PythonOperator(
-        task_id='list_s3_buckets',
-        python_callable=list_s3_buckets,
+
+    test_connection = PythonOperator(
+        task_id="check_s3_buckets",
+        python_callable=check_s3_buckets,
     )
 
+    test_connection
