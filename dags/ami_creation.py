@@ -50,7 +50,7 @@ def delete_old_amis():
 
     for image in images:
         ami_id = image['ImageId']
-        creation_time = datetime.strptime(image['CreationDate'], '%Y-%m-%d')
+        creation_time = datetime.strptime(image['CreationDate'], '%Y-%m-%dT%H:%M:%S.%fZ')
 
         if creation_time < retention_time:
             print(f"Deleting AMI: {ami_id} - Created At: {creation_time}")
