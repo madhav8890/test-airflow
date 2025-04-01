@@ -18,7 +18,7 @@ PROCESSED_FILE = "/shared_data/consul_backup_processed.json"
 # S3 Configuration
 S3_BUCKET_NAME = "airflow-test-backup-bucket"
 S3_OBJECT_KEY = "kv-backup/consul_backup_processed.json"
-S3_CONN_ID = "aws_s3_connection"  # Update with your Airflow S3 connection ID
+S3_CONN_ID = "my_aws"  # Update with your Airflow S3 connection ID
 
 # Kubernetes PVC pod override configuration
 pod_override = k8s.V1Pod(
