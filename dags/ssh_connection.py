@@ -15,7 +15,8 @@ dag = DAG(
 ssh_task = SSHOperator(
     task_id="test_ssh_connection",
     ssh_conn_id="ssh_remote",  # Airflow Connection ID
-    command="sudo bash /home/ubuntu/get_info.sh",
+    command="sudo bash {{ params.script_path }}",
+    params={"script_path": "/home/ubuntu/get_info.sh"},
     dag=dag,
 )
 
