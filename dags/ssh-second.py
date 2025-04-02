@@ -1,10 +1,9 @@
 from airflow import DAG
 from airflow.providers.ssh.operators.ssh import SSHOperator
 from airflow.operators.dummy import DummyOperator
-from airflow.decorators import task
 from datetime import datetime, timedelta
 
-# List of Hosts
+# List of Hosts - Consider moving these to environment variables or Airflow Variables
 host_list = ["10.0.139.192", "10.0.136.28", "10.0.149.221"]
 
 # Default arguments
@@ -14,23 +13,20 @@ default_args = {
     "retry_delay": timedelta(minutes=5),
     "timeout": 300,
     "depends_on_past": False,
+    "start_date": datetime(2024, 1, 1),
 }
 
 # Define DAG
 with DAG(
-    "ssh_parallel_test_dag",
+    "ssh_parallel_execution",
     default_args=default_args,
-    schedule_interval=None,
-    start_date=datetime(2024, 1, 1),
+    schedule_interval=None,  # Manual trigger
     catchup=False,
     tags=['ssh', 'parallel'],
     description='Execute commands in parallel across multiple hosts via SSH',
 ) as dag:
 
-    # Start task
     start = DummyOperator(task_id='start')
-    
-    # End task
     end = DummyOperator(task_id='end')
 
     # Create SSH tasks for each host
@@ -39,11 +35,10 @@ with DAG(
         task = SSHOperator(
             task_id=f"ssh_task_{host.replace('.', '_')}",
             ssh_conn_id="ssh_remote",
-            command="sudo bash {{ params.script_path }}",
-            params={"script_path": "/home/ubuntu/get_info.sh"},
-            do_xcom_push=False,
+            command="sudo bash /home/ubuntu/get_info.sh",  # Hardcoded path instead of using params
+            do_xcom_push=True,  # Enable if you need to capture command output
             get_pty=True,
-            remote_host=host  # Add this line to explicitly set the remote host
+            remote_host=host
         )
         ssh_tasks.append(task)
 
