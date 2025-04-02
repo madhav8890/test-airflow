@@ -43,6 +43,7 @@ with DAG(
             params={"script_path": "/home/ubuntu/get_info.sh"},
             do_xcom_push=False,
             get_pty=True,
+            remote_host=host  # Add this line to explicitly set the remote host
         )
         ssh_tasks.append(task)
 
