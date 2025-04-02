@@ -35,10 +35,13 @@ with DAG(
         task = SSHOperator(
             task_id=f"ssh_task_{host.replace('.', '_')}",
             ssh_conn_id="ssh_remote",
-            command="sudo bash /home/ubuntu/get_info.sh",  # Hardcoded path instead of using params
-            do_xcom_push=True,  # Enable if you need to capture command output
+            command="sudo bash /home/ubuntu/get_info.sh",
+            do_xcom_push=True,
             get_pty=True,
-            remote_host=host
+            remote_host=host,
+            command_timeout=300,
+            # Disable Jinja templating for the command
+            render_template_as_native_obj=False,
         )
         ssh_tasks.append(task)
 
