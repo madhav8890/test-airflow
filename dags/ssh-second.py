@@ -4,7 +4,7 @@ from airflow.operators.dummy import DummyOperator
 from datetime import datetime, timedelta
 
 # List of Hosts - Consider moving these to environment variables or Airflow Variables
-host_list = ["10.0.139.192", "10.0.136.28", "10.0.149.221"]
+host_list = ["10.0.152.181", "10.0.136.28", "10.0.149.221"]
 
 # Default arguments
 default_args = {
