@@ -59,5 +59,14 @@ with DAG(
     # Dummy end task
     end = DummyOperator(task_id="end")
 
-    # Set task dependencies
-    start >> upload_tasks >> execute_tasks >> end
+    # Set task dependencies for upload tasks
+    start >> upload_tasks
+
+    # Set dependencies between upload tasks and execute tasks
+    for upload_task, execute_task in zip(upload_tasks, execute_tasks):
+        upload_task >> execute_task
+
+    # Set dependencies for execute tasks to end task
+    execute_tasks >> end
+    # # Set task dependencies
+    # start >> upload_tasks >> execute_tasks >> end
