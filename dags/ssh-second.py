@@ -40,7 +40,7 @@ with DAG(
             do_xcom_push=True,
             get_pty=True,
             remote_host=host,
-            command_timeout=300,
+            cmd_timeout=300,  # Changed from command_timeout to cmd_timeout
         )
         ssh_tasks.append(task)
 
