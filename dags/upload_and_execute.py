@@ -50,7 +50,8 @@ with DAG(
         execute_task = SSHOperator(
             task_id=f"execute_script_{host.replace('.', '_')}",
             ssh_conn_id="ssh_remote",  # Connection ID configured in Airflow
-            command="/tmp/dummy.sh",
+            command="sudo bash {{ params.script_path }}",
+            params={"script_path": "/tmp/dummy.sh"},
             remote_host=host,
             cmd_timeout=300,  # Changed from command_timeout to cmd_timeout
         )
