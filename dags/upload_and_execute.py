@@ -40,7 +40,7 @@ with DAG(
             chmod +x /tmp/dummy.sh
             """,
             remote_host=host,
-            timeout=300,
+            cmd_timeout=300,  # Changed from command_timeout to cmd_timeout
         )
         upload_tasks.append(upload_task)
 
@@ -52,7 +52,7 @@ with DAG(
             ssh_conn_id="ssh_remote",  # Connection ID configured in Airflow
             command="/tmp/dummy.sh",
             remote_host=host,
-            timeout=300,
+            cmd_timeout=300,  # Changed from command_timeout to cmd_timeout
         )
         execute_tasks.append(execute_task)
 
